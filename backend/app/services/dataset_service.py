@@ -17,6 +17,12 @@ SOURCE_ROLES = {
     "source3": "Candidate records",
 }
 
+SOURCE_ID_PREFIXES = {
+    "source1": "S1-",
+    "source2": "S2-",
+    "source3": "S3-",
+}
+
 def safe_source(source: str) -> str:
     source_clean = str(source).strip().lower()
     if source_clean not in SOURCES:
@@ -61,6 +67,25 @@ def read_frame(path: Path, filename: Optional[str] = None) -> pd.DataFrame:
     except Exception as exc:
         raise ValueError(f"Could not read {path.name}: {exc}") from exc
 
+def validate_frame(source: str, frame: pd.DataFrame) -> list[str]:
+    errors: list[str] = []
+    missing = sorted(REQUIRED_COLUMNS - set(frame.columns))
+    errors.extend(f"Missing required column: {column}" for column in missing)
+    if frame.empty:
+        errors.append("The file contains no records.")
+    if "entity_id" in frame and frame.entity_id.astype(str).str.strip().eq("").any():
+        errors.append("The entity_id column contains blank values.")
+    if "entity_id" in frame:
+        expected_prefix = SOURCE_ID_PREFIXES[source]
+        if not frame.entity_id.astype(str).str.startswith(expected_prefix).all():
+            errors.append(f"The entity_id column must use the {expected_prefix} prefix.")
+        if frame.entity_id.duplicated().any():
+            errors.append("The entity_id column contains duplicate entity IDs.")
+    for column in ("business_name", "business_address", "country"):
+        if column in frame and frame[column].astype(str).str.strip().eq("").any():
+            errors.append(f"The {column} column contains blank values.")
+    return errors
+
 def inspect_dataset(source: str, path: Path, filename: str, size: int) -> DatasetInfo:
     errors: list[str] = []
     count, columns = None, []
@@ -71,18 +96,8 @@ def inspect_dataset(source: str, path: Path, filename: str, size: int) -> Datase
     try:
         frame = read_frame(path)
         columns = [str(column).strip() for column in frame.columns]
-        missing = sorted(REQUIRED_COLUMNS - set(columns))
-        errors.extend(f"Missing required column: {column}" for column in missing)
         count = len(frame)
-        if not count:
-            errors.append("The file contains no records.")
-        if "entity_id" in frame and frame.entity_id.astype(str).str.strip().eq("").any():
-            errors.append("The entity_id column contains blank values.")
-        for column in ("business_name", "business_address", "country"):
-            if column in frame and frame[column].astype(str).str.strip().eq("").any():
-                errors.append(f"The {column} column contains blank values.")
-        if "entity_id" in frame and frame.entity_id.duplicated().any():
-            errors.append("The entity_id column contains duplicate entity IDs.")
+        errors.extend(validate_frame(source, frame))
     except ValueError as exc:
         errors.append(str(exc))
 
@@ -122,13 +137,9 @@ def load_inputs(directory: Optional[Path] = None) -> tuple[pd.DataFrame, pd.Data
         if not path.is_file():
             raise ValueError(f"Required dataset is missing: {source}.")
         frame = read_frame(path)
-        missing = REQUIRED_COLUMNS - set(frame.columns)
-        if missing or frame.empty:
-            raise ValueError(f"{source}: missing required columns or no records.")
-        if frame.entity_id.astype(str).str.strip().eq("").any() or frame.entity_id.duplicated().any():
-            raise ValueError(f"{source}: entity_id values must be present and unique.")
-        if any(frame[column].astype(str).str.strip().eq("").any() for column in ("business_name", "business_address", "country")):
-            raise ValueError(f"{source}: business_name, business_address, and country values must be present.")
+        frame_errors = validate_frame(source, frame)
+        if frame_errors:
+            raise ValueError(f"{source}: {'; '.join(frame_errors)}")
         frames.append(frame)
     return frames[0], frames[1], frames[2]
 
@@ -136,4 +147,3 @@ def delete_dataset(dataset_id: str) -> None:
     path = source_path(dataset_id)
     path.unlink(missing_ok=True)
     path.with_suffix(".meta").unlink(missing_ok=True)
-

@@ -5,6 +5,7 @@ export * from './runs';
 export * from './results';
 export * from './candidates';
 export * from './validation';
+export * from './search';
 
 import { healthApi } from './health';
 import { uploadsApi } from './uploads';
@@ -12,6 +13,7 @@ import { runsApi } from './runs';
 import { resultsApi } from './results';
 import { candidatesApi } from './candidates';
 import { validationApi } from './validation';
+import { searchApi } from './search';
 import type { Source } from '@/lib/types';
 
 export const api = {
@@ -28,6 +30,7 @@ export const api = {
   candidates: candidatesApi.list,
   candidatesFor: candidatesApi.forEntity,
   validation: validationApi.validateRun,
+  search: searchApi.search,
   downloadUrl: runsApi.downloadUrl,
 };
 

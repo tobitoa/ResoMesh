@@ -5,9 +5,15 @@ const TONES: Record<string, Tone> = {
   matched: 'success',
   valid: 'success',
   running: 'progress',
+  validating: 'progress',
+  preprocessing: 'progress',
+  candidate_generation: 'progress',
+  matching: 'progress',
+  validation: 'progress',
   queued: 'muted',
   unmatched: 'muted',
   failed: 'error',
+  cancelled: 'error',
 };
 
 function label(status: string) {

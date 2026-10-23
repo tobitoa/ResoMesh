@@ -5,7 +5,7 @@ import pandas as pd
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from ..config import MAX_UPLOAD_BYTES, SOURCES
 from ..models.contracts import DatasetInfo
-from ..services.dataset_service import delete_dataset, inspect_dataset, list_datasets, safe_source, source_path
+from ..services.dataset_service import delete_dataset, inspect_dataset, list_datasets, safe_source, source_path, validate_frame
 from ..services.validation_service import validate_inputs
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -33,6 +33,9 @@ async def upload(source: str, file: UploadFile = File(...)) -> DatasetInfo:
         frame = pd.read_csv(io.BytesIO(content), sep="\t" if suffix == ".tsv" else ",", dtype=str, keep_default_na=False)
     except Exception as exc:
         raise HTTPException(400, "Could not read this tabular file.") from exc
+    validation_errors = validate_frame(source, frame)
+    if validation_errors:
+        raise HTTPException(400, "Invalid dataset: " + " ".join(validation_errors))
     target = source_path(source)
     frame.to_csv(target, sep="\t", index=False)
     target.with_suffix(".meta").write_text(json.dumps({"filename": filename, "size_bytes": len(content)}), encoding="utf-8")

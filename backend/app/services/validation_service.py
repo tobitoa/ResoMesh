@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 
-from ..config import RUNS_DIR, SOURCES
+from ..config import RUNS_DIR, SOURCES, UPLOADS_DIR
 from .dataset_service import inspect_dataset, source_path
 from .run_service import get_run, output_file
 from ..ml.adapter import run_submission_validator

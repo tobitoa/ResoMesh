@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowRight, History } from 'lucide-react';
 import type { Run } from '@/lib/types';
+import { isBusyStatus } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -80,7 +81,7 @@ export function RecentRuns({ runs, action }: RecentRunsProps) {
                         tone={
                           run.status === 'completed'
                             ? 'success'
-                            : run.status === 'running'
+                            : isBusyStatus(run.status)
                               ? 'info'
                               : run.status === 'failed'
                                 ? 'error'

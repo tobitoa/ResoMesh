@@ -1,6 +1,15 @@
 export type Source = 'source1' | 'source2' | 'source3';
-export type RunStatus = 'queued' | 'running' | 'completed' | 'failed';
-export type PipelineStatus = 'idle' | 'queued' | 'running' | 'completed' | 'failed';
+export type RunStatus =
+  | 'queued'
+  | 'validating'
+  | 'preprocessing'
+  | 'candidate_generation'
+  | 'matching'
+  | 'validation'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+export type PipelineStatus = 'idle' | RunStatus;
 
 export interface Health {
   ok: boolean;
@@ -32,6 +41,7 @@ export interface Dataset {
 export interface Run {
   run_id: string;
   status: RunStatus;
+  stage?: RunStatus | null;
   model: string;
   mode: string;
   created_at: string;
@@ -46,6 +56,8 @@ export interface Run {
   duration?: string;
   f05?: number;
   sources?: string[];
+  error_stage?: string | null;
+  error_category?: string | null;
 }
 
 export interface MatchResult {
@@ -111,4 +123,40 @@ export interface APIError {
   status: number;
   message: string;
   detail?: string | unknown;
+}
+
+export interface SearchItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  href?: string;
+}
+
+export interface SearchEntity extends SearchItem {
+  status?: string;
+  match_status?: string;
+  confidence?: number | null;
+}
+
+export interface SearchCandidate extends SearchItem {
+  s1_id?: string;
+  score?: number | null;
+  source?: string;
+}
+
+export interface SearchRun extends SearchItem {
+  status?: string;
+}
+
+export interface SearchDataset extends SearchItem {
+  valid: boolean;
+}
+
+export interface SearchResponse {
+  query: string;
+  entities: SearchEntity[];
+  candidates: SearchCandidate[];
+  runs: SearchRun[];
+  datasets: SearchDataset[];
+  total_matches: number;
 }

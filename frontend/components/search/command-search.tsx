@@ -14,10 +14,11 @@ import {
   GitMerge,
   Loader2,
   RefreshCw,
+  type LucideIcon,
 } from 'lucide-react';
 import { NAV_ITEMS } from '@/lib/constants';
 import { api, searchApi } from '@/lib/api';
-import type { SearchResponse, SearchItem } from '@/lib/types';
+import type { SearchResponse } from '@/lib/types';
 
 interface CommandSearchProps {
   open: boolean;
@@ -30,7 +31,7 @@ interface ActionItem {
   title: string;
   subtitle: string;
   href: string;
-  icon: any;
+  icon: LucideIcon;
 }
 
 const QUICK_ACTIONS: ActionItem[] = [
@@ -139,7 +140,7 @@ export function CommandSearch({ open, onClose }: CommandSearchProps) {
       title: string;
       subtitle: string;
       href: string;
-      icon: any;
+      icon: LucideIcon;
       onSelect: () => void;
       badge?: string;
     }> = [];

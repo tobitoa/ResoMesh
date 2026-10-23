@@ -323,9 +323,10 @@ def _execute(run_id: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> None:
     except TimeoutError as exc:
         _log(run_id, "failed", f"Execution timed out: {exc}")
         with _lock:
+            failed_stage = info.stage or "matching"
             info.status = "failed"
             info.stage = "failed"
-            info.error_stage = info.stage or "matching"
+            info.error_stage = failed_stage
             info.error_category = "PIPELINE_TIMEOUT"
             info.error = str(exc)
             info.completed_at = datetime.now(timezone.utc)
@@ -335,9 +336,10 @@ def _execute(run_id: str, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> None:
     except Exception as exc:
         _log(run_id, "failed", f"ML Pipeline error during stage '{info.stage}': {exc}")
         with _lock:
+            failed_stage = info.stage or "matching"
             info.status = "failed"
             info.stage = "failed"
-            info.error_stage = info.stage or "matching"
+            info.error_stage = failed_stage
             info.error_category = "ML_EXECUTION_FAILED"
             info.error = str(exc)
             info.completed_at = datetime.now(timezone.utc)
@@ -405,4 +407,3 @@ def output_file(run_id: str, name: str) -> Path:
         return fallback
 
     raise FileNotFoundError(f"Output file '{name}' was not found in run workspace {run_id}.")
-

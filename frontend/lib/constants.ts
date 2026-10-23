@@ -46,5 +46,12 @@ export const SOURCE_DESCRIPTIONS: Record<Source, string> = {
 export const REQUIRED_COLUMNS = ['entity_id', 'business_name', 'business_address', 'country'] as const;
 
 export function isBusyStatus(status: string): boolean {
-  return status === 'queued' || status === 'running';
+  return [
+    'queued',
+    'validating',
+    'preprocessing',
+    'candidate_generation',
+    'matching',
+    'validation',
+  ].includes(status);
 }

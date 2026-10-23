@@ -20,17 +20,27 @@ import { RecentRuns } from '@/components/dashboard/recent-runs';
 
 const PIPELINE_LABELS = ['Input', 'Preprocessing', 'Feature Extraction', 'AI Matching', 'Resolution', 'Confidence'];
 
-function buildPipeline(status: Run['status'] | undefined): WorkflowStep[] {
+function buildPipeline(status: Run['status'] | undefined, stage: Run['stage'] | null | undefined): WorkflowStep[] {
+  const currentStage = stage || status;
+  const stageIndex: Record<string, number> = {
+    queued: 0,
+    validating: 0,
+    preprocessing: 1,
+    candidate_generation: 2,
+    matching: 3,
+    validation: 5,
+  };
+
   const getStepState = (index: number): WorkflowState => {
     if (!status) return 'pending';
     if (status === 'completed') return 'complete';
-    if (status === 'failed') return index <= 3 ? 'failed' : 'pending';
-    if (status === 'running') {
-      return index <= 3 ? 'active' : 'pending';
+    if (status === 'failed' || status === 'cancelled') {
+      const failedIndex = stageIndex[stage || ''] ?? 0;
+      return index < failedIndex ? 'complete' : index === failedIndex ? 'failed' : 'pending';
     }
-    if (status === 'queued') {
-      return index === 0 ? 'active' : 'pending';
-    }
+    const activeIndex = stageIndex[currentStage || ''] ?? 0;
+    if (index < activeIndex) return 'complete';
+    if (index === activeIndex) return 'active';
     return 'pending';
   };
 
@@ -134,7 +144,7 @@ export default function RunPage() {
     : isBusy
       ? { title: 'Processing In Progress', text: `Backend job status: ${run.status}. Model is actively executing normalization, blocking, and similarity scoring in background thread.` }
       : run.status === 'completed'
-        ? { title: 'Matching Execution Completed', text: `Successfully processed ${run.record_count ?? 20} Source 1 records and generated ${run.candidate_count ?? 214} candidate pairs.` }
+        ? { title: 'Matching Execution Completed', text: `Successfully processed ${run.record_count ?? '—'} Source 1 records and generated ${run.candidate_count ?? '—'} candidate pairs.` }
         : { title: 'Execution Stopped', text: 'The run encountered an issue before completion. Review logs below.' };
 
   return (
@@ -237,17 +247,17 @@ export default function RunPage() {
                   <div>
                     <div className="run-stat-label">Records Processed</div>
                     <div className="run-stat-value mono">
-                      {run?.records_processed ?? run?.record_count ?? '20'}
+                      {run?.records_processed ?? run?.record_count ?? '—'}
                     </div>
                   </div>
                   <div>
                     <div className="run-stat-label">Candidate Pairs</div>
-                    <div className="run-stat-value mono">{run?.candidate_count ?? '214'}</div>
+                    <div className="run-stat-value mono">{run?.candidate_count ?? '—'}</div>
                   </div>
                   <div>
                     <div className="run-stat-label">Matched · Unmatched</div>
                     <div className="run-stat-value mono text-primary">
-                      {run?.matched_count ?? '17'} · {run?.unmatched_count ?? '3'}
+                      {run?.matched_count ?? '—'} · {run?.unmatched_count ?? '—'}
                     </div>
                   </div>
                 </div>
@@ -277,13 +287,13 @@ export default function RunPage() {
                     <div className={`matching-engine-step ${run?.status === 'completed' ? 'active' : ''}`}>
                       <span className="matching-engine-step-tag">03 / Alignment</span>
                       <span className="matching-engine-step-title">Candidate Pairs</span>
-                      <span className="matching-engine-step-desc">214 pairwise matches</span>
+                      <span className="matching-engine-step-desc">{run?.candidate_count ?? '—'} pairwise candidates</span>
                     </div>
                     <div className="workspace-flow-arrow">→</div>
                     <div className={`matching-engine-step ${run?.status === 'completed' ? 'active' : ''}`}>
                       <span className="matching-engine-step-tag">04 / Confidence</span>
                       <span className="matching-engine-step-title">Cluster Resolution</span>
-                      <span className="matching-engine-step-desc">0.873 F₀.₅ · ≥ 0.72 threshold</span>
+                      <span className="matching-engine-step-desc">Resolver threshold ≥ 0.72</span>
                     </div>
                   </div>
                 </div>
@@ -294,7 +304,7 @@ export default function RunPage() {
                     <span>Resolution Pipeline</span>
                     <span className="mono text-xs text-muted">{run ? `run ${run.run_id}` : 'ready'}</span>
                   </div>
-                  <Workflow steps={buildPipeline(run?.status)} label="Run pipeline" />
+                  <Workflow steps={buildPipeline(run?.status, run?.stage)} label="Run pipeline" />
                   <p className="helper-text mt-3">
                     Stages reflect verified worker state. The pipeline transitions automatically as jobs complete.
                   </p>

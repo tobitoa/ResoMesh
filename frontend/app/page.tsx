@@ -15,6 +15,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { isBusyStatus } from '@/lib/constants';
 import type { MatchResult, Run, Validation } from '@/lib/types';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { RecentRuns } from '@/components/dashboard/recent-runs';
@@ -26,7 +27,7 @@ import { ResultDrawer } from '@/components/results/result-drawer';
 import { ErrorState } from '@/components/ui/error-state';
 import { EmptyState } from '@/components/ui/empty-state';
 
-function buildWorkflow(status: Run['status'] | undefined, hasValidData: boolean): WorkflowStep[] {
+function buildWorkflow(status: Run['status'] | undefined, hasValidData: boolean, stage?: Run['stage'] | null): WorkflowStep[] {
   if (status === 'completed') {
     return [
       { label: 'Source Ingestion', descriptor: 'Source 1, 2, 3 TSVs validated', state: 'complete' },
@@ -38,14 +39,23 @@ function buildWorkflow(status: Run['status'] | undefined, hasValidData: boolean)
     ];
   }
 
-  if (status === 'running') {
+  if (isBusyStatus(status || '')) {
+    const stageIndex: Record<string, number> = {
+      queued: 0,
+      validating: 0,
+      preprocessing: 1,
+      candidate_generation: 2,
+      matching: 3,
+      validation: 5,
+    };
+    const activeIndex = stageIndex[stage || status || 'queued'] ?? 0;
     return [
-      { label: 'Source Ingestion', descriptor: 'Source 1, 2, 3 TSVs validated', state: 'complete' },
-      { label: 'Text Normalization', descriptor: 'Multi-lingual legal form & token sorting', state: 'complete' },
-      { label: 'Candidate Generation', descriptor: 'Multi-pass signal-ranked blocking', state: 'complete' },
-      { label: 'Pairwise Scoring', descriptor: 'Similarity vector feature scoring', state: 'active' },
-      { label: 'Decision Decoding', descriptor: 'Threshold filter ≥ 0.72', state: 'pending' },
-      { label: 'Output & Validation', descriptor: 'Leaderboard TSV export & schema check', state: 'pending' },
+      { label: 'Source Ingestion', descriptor: 'Source 1, 2, 3 TSVs validated', state: activeIndex > 0 ? 'complete' : 'active' },
+      { label: 'Text Normalization', descriptor: 'Multi-lingual legal form & token sorting', state: activeIndex > 1 ? 'complete' : activeIndex === 1 ? 'active' : 'pending' },
+      { label: 'Candidate Generation', descriptor: 'Multi-pass signal-ranked blocking', state: activeIndex > 2 ? 'complete' : activeIndex === 2 ? 'active' : 'pending' },
+      { label: 'Pairwise Scoring', descriptor: 'Similarity vector feature scoring', state: activeIndex > 3 ? 'complete' : activeIndex === 3 ? 'active' : 'pending' },
+      { label: 'Decision Decoding', descriptor: 'Threshold filter ≥ 0.72', state: activeIndex > 4 ? 'complete' : activeIndex === 4 ? 'active' : 'pending' },
+      { label: 'Output & Validation', descriptor: 'Leaderboard TSV export & schema check', state: activeIndex === 5 ? 'active' : 'pending' },
     ];
   }
 
@@ -138,34 +148,22 @@ export default function DashboardPage() {
             if (preview && preview.items.length > 0) {
               const matchedItem = preview.items.find(it => it.status === 'matched') || preview.items[0];
               if (matchedItem) {
-                // If detailed matches exist in item
-                const rawMatches = (matchedItem as any).matches || [];
-                const candidatesList = rawMatches.map((m: any) => ({
-                  entity_id: m.entity_id,
-                  source: m.source || 'source2',
-                  business_name: m.business_name || 'Matched Entity',
-                  business_address: m.business_address || 'Address on file',
-                  country: m.country || matchedItem.country,
-                  similarity: m.confidence || 0.92,
-                  confidence: (m.confidence >= 0.9 ? 'high' : m.confidence >= 0.75 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
-                  signals: ['Exact Token-Sorted Match', 'High Normalization Score'],
-                }));
-
-                // Fallback candidate list if rawMatches wasn't serialized
-                if (candidatesList.length === 0 && matchedItem.matched_entity_ids.length > 0) {
-                  for (const mid of matchedItem.matched_entity_ids) {
-                    candidatesList.push({
-                      entity_id: mid,
-                      source: mid.startsWith('S3-') ? 'source3' : 'source2',
-                      business_name: matchedItem.business_name,
-                      business_address: matchedItem.business_address,
-                      country: matchedItem.country,
-                      similarity: matchedItem.confidence || 0.94,
-                      confidence: 'high',
-                      signals: ['Signal-Ranked Match', 'Address Alignment'],
-                    });
-                  }
-                }
+                const detail = await api.result(matchedItem.source1_entity_id, completed.run_id).catch(() => null);
+                const candidatesList = (detail?.candidates || [])
+                  .filter(candidate => String(candidate.is_match).toLowerCase() === 'true')
+                  .map(candidate => {
+                    const similarity = Number(candidate.score);
+                    return {
+                      entity_id: candidate.candidate_entity_id,
+                      source: candidate.candidate_source,
+                      business_name: candidate.candidate_business_name,
+                      business_address: candidate.candidate_address,
+                      country: candidate.candidate_country,
+                      similarity: Number.isFinite(similarity) ? similarity : 0,
+                      confidence: (similarity >= 0.9 ? 'high' : similarity >= 0.75 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
+                      signals: [],
+                    };
+                  });
 
                 if (candidatesList.length > 0) {
                   setFeaturedItem({
@@ -336,7 +334,7 @@ export default function DashboardPage() {
           <StatusIndicator status={latestRun?.status || (datasetsValid ? 'valid' : 'queued')} />
         </div>
         <div className="card-body">
-          <Workflow steps={buildWorkflow(latestRun?.status, datasetsValid)} label="Resolution workflow" />
+          <Workflow steps={buildWorkflow(latestRun?.status, datasetsValid, latestRun?.stage)} label="Resolution workflow" />
           <div className="pipeline-summary-box mt-5">
             {latestRun?.status === 'completed' ? (
               <>
@@ -345,7 +343,7 @@ export default function DashboardPage() {
                   <strong>All required stages completed.</strong> Run <code className="mono">{latestRun.run_id}</code> produced official matching results and candidate pairs validated against decision threshold &ge; 0.72.
                 </p>
               </>
-            ) : latestRun?.status === 'running' ? (
+            ) : latestRun && isBusyStatus(latestRun.status) ? (
               <>
                 <span className="spinner spinner-sm flex-none" />
                 <p className="pipeline-summary-text">
